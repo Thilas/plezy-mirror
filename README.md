@@ -17,7 +17,7 @@ Head to the [Releases](https://github.com/Thilas/plezy-mirror/releases/latest) p
 |---------------------------------|--------------|------------------------------|
 | `plezy-android-arm64-v8a.apk`   | ARM 64-bit   | Most modern phones & tablets |
 | `plezy-android-armeabi-v7a.apk` | ARM 32-bit   | Older Android devices        |
-| `plezy-android-x86_64.apk`      | x86_64       | Emulators, ChromeOS          |
+| `plezy-android-x86_64.apk`      | x86-64       | Emulators, ChromeOS          |
 
 ## Why?
 
