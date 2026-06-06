@@ -139,7 +139,7 @@ Get-Releases -ExcludeDrafts -Property tagName -Limit $MaxReleases -ErrorAction S
     $releases[$_.tagName] = $true
 }
 
-Get-Releases -Repo $SourceRepo -ExcludeDrafts -Property tagName -Limit $MaxReleases -Asc -ErrorAction Stop
+Get-Releases -Repo $SourceRepo -ExcludeDrafts -Property tagName -Limit $MaxReleases -ErrorAction Stop
 | Where-Object { !$releases.ContainsKey($_.tagName) }
 | ForEach-Object {
     'Processing release: {0}' -f $_.tagName | Write-Host -ForegroundColor Cyan

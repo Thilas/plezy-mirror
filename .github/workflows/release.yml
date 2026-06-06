@@ -26,4 +26,4 @@ jobs:
         run: ./Sync-GitHubReleases.ps1 -MaxReleases $env:MAX_RELEASES -Verbose
         env:
           GITHUB_TOKEN : ${{ secrets.GITHUB_TOKEN }}
-          MAX_RELEASES : ${{ inputs.max_releases || 1 }}
+          MAX_RELEASES : ${{ inputs.max_releases || 100 }}
