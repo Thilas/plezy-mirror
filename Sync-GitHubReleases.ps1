@@ -32,15 +32,14 @@ function Get-Release {
     [CmdletBinding()]
     param(
         [Alias('tagName')]
-        [ValidateNotNullOrWhiteSpace()]
-        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [Parameter(ValueFromPipelineByPropertyName)]
         [string] $Tag,
         [string[]] $Property = @('apiUrl', 'assets', 'author', 'body', 'createdAt', 'databaseId', 'id', 'isDraft', 'isImmutable', 'isPrerelease', 'name', 'publishedAt', 'tagName', 'tarballUrl', 'targetCommitish', 'uploadUrl', 'url', 'zipballUrl'),
         [string] $Repo
     )
     $arguments = @(
         'release', 'view'
-        $Tag
+        if ($Tag) { $Tag }
         '--json', ($Property -join ',')
         if ($Repo) { '--repo', $Repo }
     )
@@ -132,6 +131,70 @@ function Add-Release {
     }
 }
 
+function Set-Release {
+    [CmdletBinding(SupportsShouldProcess)]
+    param(
+        [Alias('tagName')]
+        [ValidateNotNullOrWhiteSpace()]
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+        [string] $Tag,
+        [Alias('isDraft')]
+        [Parameter(ValueFromPipelineByPropertyName)]
+        [switch] $Draft,
+        [System.Nullable[bool]] $Latest,
+        [Alias('body')]
+        [Parameter(ValueFromPipelineByPropertyName)]
+        [string] $Notes,
+        [Alias('isPrerelease')]
+        [Parameter(ValueFromPipelineByPropertyName)]
+        [switch] $Prerelease,
+        [string] $NewTag,
+        [Alias('targetCommitish')]
+        [Parameter(ValueFromPipelineByPropertyName)]
+        [string] $Target,
+        [Alias('name')]
+        [Parameter(ValueFromPipelineByPropertyName)]
+        [string] $Title,
+        [switch] $VerifyTag,
+        [string] $Repo
+    )
+    $arguments = @(
+        'release', 'edit'
+        $Tag
+        if ($Draft) { '--draft' }
+        if ($Latest) { '--latest' }
+        elseif ($false -eq $Latest) { '--latest=false' }
+        if ($Notes) { '--notes', $Notes }
+        if ($Prerelease) { '--prerelease' }
+        if ($NewTag) { '--tag', $NewTag }
+        if ($Target) { '--target', $Target }
+        if ($Title) { '--title', $Title }
+        if ($VerifyTag) { '--verify-tag' }
+        if ($Repo) { '--repo', $Repo }
+    )
+    Write-Verbose "gh $arguments"
+    if ($PSCmdlet.ShouldProcess("GitHub release: $Tag", 'Edit release')) {
+        & gh $arguments
+    }
+}
+
+function Select-Reverse {
+    [CmdletBinding()]
+    param(
+        [Parameter(ValueFromPipeline)]
+        [psobject] $InputObject
+    )
+    begin {
+        $stack = [System.Collections.Stack]::new()
+    }    
+    process {
+        $stack.Push($InputObject)
+    }
+    end {
+        $stack.ToArray()
+    }
+}
+
 'Checking for new releases...' >> $env:GITHUB_STEP_SUMMARY
 
 $releases = @{}
@@ -139,10 +202,12 @@ Get-Releases -ExcludeDrafts -Property tagName -Limit $MaxReleases -ErrorAction S
     $releases[$_.tagName] = $true
 }
 
-Get-Releases -Repo $SourceRepo -ExcludeDrafts -Property tagName -Limit $MaxReleases -ErrorAction Stop
+Get-Releases -Repo $SourceRepo -ExcludeDrafts -Property tagName, isLatest -Limit $MaxReleases -ErrorAction Stop
 | Where-Object { !$releases.ContainsKey($_.tagName) }
+| Select-Reverse
 | ForEach-Object {
-    'Processing release: {0}' -f $_.tagName | Write-Host -ForegroundColor Cyan
+    $isLatest = $_.isLatest
+    'Processing release: {0}{1}' -f $_.tagName, ($isLatest ? " [LATEST]": "") | Write-Host -ForegroundColor Cyan
     $release = $_ | Get-Release -Repo $SourceRepo -Property body, isDraft, isPrerelease, name, tagName -ErrorAction Stop
     $guid = New-Guid
     $releaseDirectory = New-Item -ItemType Directory -Path "$PSScriptRoot/$guid" -ErrorAction Stop
@@ -167,7 +232,7 @@ Get-Releases -Repo $SourceRepo -ExcludeDrafts -Property tagName -Limit $MaxRelea
         }
 
         $assets = @($releaseDirectory | Get-ChildItem -Filter *.apk)
-        $release | Add-Release -Asset $assets -Target $null -ErrorAction Stop
+        $release | Add-Release -Asset $assets -Latest:$isLatest -Target $null -ErrorAction Stop
         '✅ Release {0} created with {1} asset(s)' -f $release.tagName, $assets.Count >> $env:GITHUB_STEP_SUMMARY
     } catch {
         '❌ Release {0} failed: {1}' -f $release.tagName, $_.Exception.Message >> $env:GITHUB_STEP_SUMMARY
@@ -175,4 +240,10 @@ Get-Releases -Repo $SourceRepo -ExcludeDrafts -Property tagName -Limit $MaxRelea
     } finally {
         $releaseDirectory | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
     }
+}
+
+$actualLatest = Get-Release -Property tagName -ErrorAction Stop
+$expectedLatest = Get-Release -Repo $SourceRepo -Property tagName -ErrorAction Stop
+if ($actualLatest.tagName -ne $expectedLatest.tagName) {
+    $expectedLatest | Set-Release -Latest:$true
 }
